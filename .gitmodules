@@ -1,0 +1,6 @@
+[submodule "source/max-sdk-base"]
+	path = source/max-sdk-base
+	url = https://github.com/Cycling74/max-sdk-base.git
+[submodule "source/Fusion"]
+	path = source/Fusion
+	url = https://github.com/xioTechnologies/Fusion.git
