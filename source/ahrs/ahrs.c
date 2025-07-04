@@ -16,6 +16,9 @@ typedef struct _ahrs
     FusionVector gyro;
     FusionVector accel;
     
+    FusionVector gyroOffset;
+    FusionVector accelOffset;
+    
     void *out;
     void *out2;
     void *out3;
@@ -53,9 +56,15 @@ void ext_main(void* r)
     CLASS_ATTR_ACCESSORS(c, "gain", NULL, (method)ahrs_gain_set)
     CLASS_ATTR_LABEL(c, "gain", 0, "Gain");
     
-    CLASS_ATTR_DOUBLE(c, "accelerationRejection", 0, t_ahrs, accelRejection);
-    CLASS_ATTR_ACCESSORS(c, "accelerationRejection", NULL, (method)ahrs_accelRejection_set)
-    CLASS_ATTR_LABEL(c, "accelerationRejection", 0, "Acceleration rejection");
+    CLASS_ATTR_DOUBLE(c, "acceleration_rejection", 0, t_ahrs, accelRejection);
+    CLASS_ATTR_ACCESSORS(c, "acceleration_rejection", NULL, (method)ahrs_accelRejection_set)
+    CLASS_ATTR_LABEL(c, "acceleration_rejection", 0, "Acceleration rejection");
+    
+    CLASS_ATTR_FLOAT_ARRAY(c, "gyroscope_offset", 0, t_ahrs, gyroOffset.array, 3);
+    CLASS_ATTR_LABEL(c, "gyroscope_offset", 0, "Gyroscope offset");
+    
+    CLASS_ATTR_FLOAT_ARRAY(c, "accelerometer_offset", 0, t_ahrs, accelOffset.array, 3);
+    CLASS_ATTR_LABEL(c, "accelerometer_offset", 0, "Accelerometer offset");
     
     class_register(CLASS_BOX, c);
     ahrs_class = c;
@@ -101,22 +110,12 @@ void* ahrs_new(t_symbol* s, long argc, t_atom* argv)
     return (x);
 }
 
-// Define calibration (replace with actual calibration data if available)
-const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-const FusionVector gyroscopeSensitivity = {1.0f, 1.0f, 1.0f};
-const FusionVector gyroscopeOffset = {0.0f, 0.0f, 0.0f};
-const FusionMatrix accelerometerMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-const FusionVector accelerometerSensitivity = {1.0f, 1.0f, 1.0f};
-const FusionVector accelerometerOffset = {0.0f, 0.0f, 0.0f};
-const FusionMatrix softIronMatrix = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
-
 void ahrs_update(t_ahrs *x){
     //post("tick");
     
     // Apply calibration
-    x->gyro = FusionCalibrationInertial(x->gyro, gyroscopeMisalignment, gyroscopeSensitivity, gyroscopeOffset);
-    x->accel = FusionCalibrationInertial(x->accel, accelerometerMisalignment, accelerometerSensitivity, accelerometerOffset);
+    x->gyro = FusionVectorSubtract(x->gyro, x->gyroOffset);
+    x->accel = FusionVectorSubtract(x->accel, x->accelOffset);
 
     // Update gyroscope offset correction algorithm
     x->gyro = FusionOffsetUpdate(&x->offset, x->gyro);
@@ -157,8 +156,6 @@ void ahrs_update_settings(t_ahrs* x){
 }
 
 void ahrs_list(t_ahrs *x, t_symbol *s, long argc, t_atom *argv) {
-    //post("Received list on left inlet with %ld items:", argc);
-    
     if(argc >= 6){
         for (long i = 0; i < 3; i++) {
             x->gyro.array[i] = atom_getfloat(argv + i);
@@ -167,7 +164,8 @@ void ahrs_list(t_ahrs *x, t_symbol *s, long argc, t_atom *argv) {
             x->accel.array[i] = atom_getfloat(argv + 3 + i);
         }
         
-        if(argc == 7){
+        //use external delta time if provided
+        if(argc >= 7){
             x->dt = atom_getfloat(argv + 6);
         }
         else{
